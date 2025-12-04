@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Acchiappa il Puntino - Reflex Trainer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap');
+
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background-color: #1a1a2e;
+            color: white;
+            overflow: hidden; /* Previene lo scroll durante il gioco */
+            touch-action: manipulation; /* Migliora la risposta al tocco su mobile */
+            user-select: none; /* Previene la selezione del testo */
+        }
+
+        /* Animazione per il puntino quando appare */
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            70% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .dot {
+            position: absolute;
+            border-radius: 50%;
+            cursor: crosshair;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.6);
+            animation: popIn 0.1s ease-out;
+            transition: background-color 0.2s;
+            /* Area cliccabile sicura */
+            z-index: 10;
+        }
+
+        /* Effetto click */
+        .ripple {
+            position: absolute;
+            border-radius: 50%;
+            transform: scale(0);
+            animation: ripple-anim 0.4s linear;
+            background-color: rgba(255, 255, 255, 0.5);
+            pointer-events: none;
+        }
+
+        @keyframes ripple-anim {
+            to {
+                transform: scale(4);
+                opacity: 0;
+            }
+        }
+
+        /* UI Overlay glassmorphism */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        /* Timer bar animation */
+        .timer-bar {
+            transition: width 1s linear;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen relative flex flex-col">
+
+    <!-- HUD (Heads Up Display) -->
+    <div class="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-20 pointer-events-none">
+        <div class="bg-gray-900 bg-opacity-80 rounded-full px-6 py-2 border border-gray-700">
+            <span class="text-gray-400 text-sm uppercase font-bold tracking-wider">Punti</span>
+            <span id="score-display" class="text-2xl font-bold text-yellow-400 ml-2">0</span>
+        </div>
+        
+        <div class="bg-gray-900 bg-opacity-80 rounded-full px-6 py-2 border border-gray-700">
+            <span class="text-gray-400 text-sm uppercase font-bold tracking-wider">Tempo</span>
+            <span id="time-display" class="text-2xl font-bold text-red-400 ml-2">30</span>
+        </div>
+    </div>
+
+    <!-- Barra del tempo visiva -->
+    <div class="absolute top-0 left-0 w-full h-1 bg-gray-800 z-30">
+        <div id="timer-bar" class="h-full bg-gradient-to-r from-green-400 to-red-500 w-full timer-bar"></div>
+    </div>
+
+    <!-- Area di Gioco -->
+    <div id="game-area" class="flex-grow relative w-full h-full cursor-crosshair">
+        <!-- I puntini appariranno qui -->
+    </div>
+
+    <!-- Schermata Iniziale / Menu -->
+    <div id="start-screen" class="absolute inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-95">
+        <div class="glass-panel p-8 rounded-2xl text-center max-w-md w-full mx-4 transform transition hover:scale-105 duration-300">
+            <h1 class="text-5xl font-bold mb-2 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+                Acchiappa<br>il Puntino
+            </h1>
+            <p class="text-gray-300 mb-6 text-lg">Allena i tuoi riflessi!</p>
+            
+            <div class="bg-gray-800 rounded-lg p-4 mb-6">
+                <p class="text-sm text-gray-400 mb-1">Miglior Punteggio</p>
+                <p id="best-score" class="text-3xl font-bold text-yellow-400">0</p>
+            </div>
+
+            <ul class="text-left text-gray-300 mb-8 space-y-2 text-sm bg-gray-800 bg-opacity-50 p-4 rounded-lg">
+                <li class="flex items-center"><span class="w-2 h-2 bg-green-400 rounded-full mr-2"></span> Clicca il puntino appena appare.</li>
+                <li class="flex items-center"><span class="w-2 h-2 bg-blue-400 rounded-full mr-2"></span> Hai 30 secondi.</li>
+                <li class="flex items-center"><span class="w-2 h-2 bg-red-400 rounded-full mr-2"></span> Sii veloce e preciso!</li>
+            </ul>
+
+            <button onclick="startGame()" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-4 px-8 rounded-xl text-xl shadow-lg transform transition active:scale-95 focus:outline-none ring-2 ring-purple-400 ring-opacity-50">
+                INIZIA LA SFIDA
+            </button>
+        </div>
+    </div>
+
+    <!-- Schermata Game Over -->
+    <div id="game-over-screen" class="hidden absolute inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-95">
+        <div class="glass-panel p-8 rounded-2xl text-center max-w-md w-full mx-4">
+            <h2 class="text-4xl font-bold mb-2 text-white">Tempo Scaduto!</h2>
+            <p class="text-gray-400 mb-6">Ecco come è andata:</p>
+            
+            <div class="grid grid-cols-2 gap-4 mb-8">
+                <div class="bg-gray-800 rounded-lg p-4">
+                    <p class="text-xs text-gray-400 uppercase">Punteggio</p>
+                    <p id="final-score" class="text-4xl font-bold text-white">0</p>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-4">
+                    <p class="text-xs text-gray-400 uppercase">Precisione</p>
+                    <p id="final-accuracy" class="text-4xl font-bold text-green-400">100%</p>
+                </div>
+            </div>
+
+            <p id="new-record-msg" class="hidden text-yellow-400 font-bold mb-6 text-lg animate-bounce">🏆 NUOVO RECORD! 🏆</p>
+
+            <button onclick="startGame()" class="w-full bg-white text-gray-900 hover:bg-gray-200 font-bold py-3 px-8 rounded-xl text-lg shadow-lg transform transition active:scale-95 mb-3">
+                Riprova
+            </button>
+            <button onclick="showStartScreen()" class="w-full bg-transparent border border-gray-600 text-gray-400 hover:text-white hover:border-white font-semibold py-3 px-8 rounded-xl transition">
+                Menu Principale
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- Configurazioni di Gioco ---
+        const GAME_DURATION = 30; // secondi
+        const DOT_SIZE = 60; // pixel (abbastanza grande per il touch)
+        const COLORS = ['#FF0055', '#00FF99', '#00CCFF', '#FFCC00', '#FF33FF', '#33FF33'];
+
+        // --- Stato del Gioco ---
+        let score = 0;
+        let timeLeft = GAME_DURATION;
+        let timerInterval = null;
+        let isPlaying = false;
+        let clicks = 0; // Per calcolare la precisione (ogni click sullo schermo conta)
+        let hits = 0;   // Click andati a segno
+
+        // --- Riferimenti DOM ---
+        const gameArea = document.getElementById('game-area');
+        const scoreDisplay = document.getElementById('score-display');
+        const timeDisplay = document.getElementById('time-display');
+        const timerBar = document.getElementById('timer-bar');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const bestScoreDisplay = document.getElementById('best-score');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const finalAccuracyDisplay = document.getElementById('final-accuracy');
+        const newRecordMsg = document.getElementById('new-record-msg');
+
+        // --- Audio Context (Sintetizzatore semplice) ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            if (type === 'hit') {
+                // Suono acuto e breve ("Pop")
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'over') {
+                // Suono basso ("Game Over")
+                oscillator.type = 'triangle';
+                oscillator.frequency.setValueAtTime(200, audioCtx.currentTime);
+                oscillator.frequency.linearRampToValueAtTime(100, audioCtx.currentTime + 0.5);
+                gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.5);
+            }
+        }
+
+        // --- Logica High Score ---
+        function loadBestScore() {
+            const best = localStorage.getItem('reflexTrainerBest') || 0;
+            bestScoreDisplay.textContent = best;
+            return parseInt(best);
+        }
+        loadBestScore();
+
+        // --- Core del Gioco ---
+
+        function init() {
+            // Gestione click a vuoto per la precisione
+            gameArea.addEventListener('mousedown', (e) => {
+                if(isPlaying && e.target === gameArea) {
+                    clicks++;
+                }
+            });
+            // Supporto touch
+             gameArea.addEventListener('touchstart', (e) => {
+                if(isPlaying && e.target === gameArea) {
+                    clicks++;
+                }
+            }, {passive: true});
+        }
+
+        function startGame() {
+            score = 0;
+            hits = 0;
+            clicks = 0;
+            timeLeft = GAME_DURATION;
+            isPlaying = true;
+
+            // UI Reset
+            scoreDisplay.textContent = '0';
+            timeDisplay.textContent = timeLeft;
+            timerBar.style.width = '100%';
+            timerBar.style.transition = 'none'; // Reset animazione immediato
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            gameArea.innerHTML = ''; // Pulisci area
+
+            // Avvia loop
+            spawnDot();
+            
+            // Hack per riavviare l'animazione CSS della barra
+            setTimeout(() => {
+                timerBar.style.transition = `width ${GAME_DURATION}s linear`;
+                timerBar.style.width = '0%';
+            }, 50);
+
+            clearInterval(timerInterval);
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        function updateTimer() {
+            timeLeft--;
+            timeDisplay.textContent = timeLeft;
+
+            if (timeLeft <= 0) {
+                endGame();
+            } else if (timeLeft <= 5) {
+                // Effetto urgenza visiva
+                timeDisplay.classList.add('text-red-600', 'scale-125');
+                setTimeout(() => timeDisplay.classList.remove('text-red-600', 'scale-125'), 200);
+            }
+        }
+
+        function getRandomPosition(elementSize) {
+            const width = gameArea.clientWidth;
+            const height = gameArea.clientHeight;
+            
+            // Margine di sicurezza
+            const padding = 20; 
+            
+            const maxLeft = width - elementSize - padding;
+            const maxTop = height - elementSize - padding;
+
+            const left = Math.max(padding, Math.floor(Math.random() * maxLeft));
+            const top = Math.max(padding, Math.floor(Math.random() * maxTop));
+
+            return { left, top };
+        }
+
+        function spawnDot() {
+            if (!isPlaying) return;
+
+            // Rimuovi puntini vecchi se ce ne sono (non dovrebbe succedere, ma per sicurezza)
+            gameArea.innerHTML = '';
+
+            const dot = document.createElement('div');
+            dot.classList.add('dot');
+            
+            // Stile casuale
+            const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+            
+            // Posizionamento
+            const pos = getRandomPosition(DOT_SIZE);
+            
+            dot.style.width = `${DOT_SIZE}px`;
+            dot.style.height = `${DOT_SIZE}px`;
+            dot.style.backgroundColor = color;
+            dot.style.left = `${pos.left}px`;
+            dot.style.top = `${pos.top}px`;
+
+            // Eventi
+            const handleHit = (e) => {
+                e.stopPropagation(); // Evita di contare il click sul gameArea
+                e.preventDefault();  // Previene zoom su mobile
+                hitDot(e, dot);
+            };
+
+            dot.addEventListener('mousedown', handleHit);
+            dot.addEventListener('touchstart', handleHit, {passive: false});
+
+            gameArea.appendChild(dot);
+        }
+
+        function hitDot(event, dotElement) {
+            if (!isPlaying) return;
+
+            hits++;
+            clicks++;
+            score++;
+            scoreDisplay.textContent = score;
+            
+            playSound('hit');
+            
+            // Effetto visivo "Ripple"
+            createRipple(event.clientX || event.touches[0].clientX, event.clientY || event.touches[0].clientY);
+
+            // Rimuovi il vecchio e crea il nuovo
+            dotElement.remove();
+            spawnDot();
+        }
+
+        function createRipple(x, y) {
+            const ripple = document.createElement('div');
+            ripple.classList.add('ripple');
+            ripple.style.left = `${x}px`;
+            ripple.style.top = `${y}px`;
+            document.body.appendChild(ripple);
+            
+            setTimeout(() => {
+                ripple.remove();
+            }, 400);
+        }
+
+        function endGame() {
+            isPlaying = false;
+            clearInterval(timerInterval);
+            playSound('over');
+
+            // Calcolo precisione
+            let accuracy = 0;
+            if (clicks > 0) {
+                accuracy = Math.round((hits / clicks) * 100);
+            }
+            // Se non hai cliccato nulla, 0%
+            if (hits === 0) accuracy = 0;
+
+            // Aggiorna UI Game Over
+            finalScoreDisplay.textContent = score;
+            finalAccuracyDisplay.textContent = `${accuracy}%`;
+
+            // Gestione High Score
+            const currentBest = loadBestScore();
+            if (score > currentBest) {
+                localStorage.setItem('reflexTrainerBest', score);
+                newRecordMsg.classList.remove('hidden');
+                loadBestScore(); // Aggiorna display
+            } else {
+                newRecordMsg.classList.add('hidden');
+            }
+
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        function showStartScreen() {
+            gameOverScreen.classList.add('hidden');
+            startScreen.classList.remove('hidden');
+            gameArea.innerHTML = '';
+        }
+
+        // Inizializza listener globali
+        init();
+
+    </script>
+</body>
+</html>
